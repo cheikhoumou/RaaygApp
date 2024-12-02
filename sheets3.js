@@ -15,48 +15,77 @@ async function initializeSheets() {
         console.log('Google Sheets API initialized');
     } catch (err) {
         console.error('Error initializing Google Sheets:', err);
-        throw err;
+        throw new Error('فشل في تهيئة Google Sheets: ' + err.message);
     }
 }
 
 // قراءة البيانات من Google Sheet
 async function readFromSheet(range) {
+    console.log('Attempting to read from sheet:', range);
+    
     if (!isInitialized) {
+        console.log('Initializing sheets before reading...');
         await initializeSheets();
     }
     
     try {
+        console.log('Making API request...');
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: SHEET_ID,
             range: range,
+            valueRenderOption: 'UNFORMATTED_VALUE',
+            dateTimeRenderOption: 'FORMATTED_STRING'
         });
+        
+        console.log('Response received:', response);
+        
+        if (!response.result || !response.result.values) {
+            console.error('No values found in response:', response);
+            throw new Error('لم يتم العثور على بيانات في الجدول');
+        }
+        
         return response.result.values;
     } catch (err) {
         console.error('Error reading from sheet:', err);
-        throw err;
+        if (err.status === 403) {
+            throw new Error('تم رفض الوصول إلى الجدول. تأكد من أن الملف مشارك بشكل صحيح.');
+        } else if (err.status === 404) {
+            throw new Error('لم يتم العثور على الجدول. تأكد من معرف الملف.');
+        }
+        throw new Error('حدث خطأ في قراءة البيانات: ' + err.message);
     }
 }
 
 // التحقق من تسجيل الدخول
 async function verifyLogin(username, password) {
     try {
+        console.log('Verifying login for username:', username);
         const users = await readFromSheet('Users!A2:C');
-        if (!users) {
-            throw new Error('لا يمكن قراءة بيانات المستخدمين');
+        
+        if (!Array.isArray(users) || users.length === 0) {
+            console.error('No users found in sheet');
+            throw new Error('لم يتم العثور على بيانات المستخدمين');
         }
         
-        const user = users.find(user => user[0] === username && user[1] === password);
+        console.log('Found users:', users.length);
+        const user = users.find(user => 
+            user[0]?.toString() === username && 
+            user[1]?.toString() === password
+        );
+        
         if (user) {
-            // تخزين معلومات المستخدم في localStorage
+            console.log('Login successful');
             localStorage.setItem('currentUser', JSON.stringify({
                 username: user[0],
-                name: user[2]
+                name: user[2] || user[0]
             }));
             return true;
         }
+        
+        console.log('Login failed: invalid credentials');
         return false;
     } catch (err) {
-        console.error('Error during login:', err);
+        console.error('Login verification error:', err);
         alert('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
         return false;
     }
@@ -80,7 +109,7 @@ async function appendToSheet(range, values) {
         return response.result;
     } catch (err) {
         console.error('Error appending to sheet:', err);
-        throw err;
+        throw new Error('فشل في إضافة البيانات: ' + err.message);
     }
 }
 
