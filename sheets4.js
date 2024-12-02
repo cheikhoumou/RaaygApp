@@ -60,15 +60,17 @@ async function readFromSheet(range) {
 async function verifyLogin(username, password) {
     try {
         console.log('Verifying login for username:', username);
-        const users = await readFromSheet('Users!A2:C');
+        // تغيير النطاق ليشمل الصف الأول أيضاً للتحقق من وجود البيانات
+        const users = await readFromSheet('Users!A1:C');
         
-        if (!Array.isArray(users) || users.length === 0) {
+        if (!Array.isArray(users) || users.length <= 1) {
             console.error('No users found in sheet');
             throw new Error('لم يتم العثور على بيانات المستخدمين');
         }
         
         console.log('Found users:', users.length);
-        const user = users.find(user => 
+        // تخطي الصف الأول (العناوين) والبحث في باقي الصفوف
+        const user = users.slice(1).find(user => 
             user[0]?.toString() === username && 
             user[1]?.toString() === password
         );
@@ -86,8 +88,7 @@ async function verifyLogin(username, password) {
         return false;
     } catch (err) {
         console.error('Login verification error:', err);
-        alert('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
-        return false;
+        throw err;
     }
 }
 
