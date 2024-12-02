@@ -8,6 +8,18 @@ let tokenClient;
 let gapiInited = false;
 let gisInited = false;
 
+function initializeGoogleAuth() {
+    if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: '', // سيتم تعريفه لاحقاً
+        });
+        gisInited = true;
+        maybeEnableButtons();
+    }
+}
+
 function gapiLoaded() {
     gapi.load('client', async () => {
         await gapi.client.init({
@@ -19,41 +31,37 @@ function gapiLoaded() {
     });
 }
 
-function gisLoaded() {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: '', // defined later
-    });
-    gisInited = true;
-    maybeEnableButtons();
-}
-
 function maybeEnableButtons() {
     if (gapiInited && gisInited) {
-        document.getElementById('authorize_button').style.visibility = 'visible';
+        const authButton = document.getElementById('authorize_button');
+        if (authButton) {
+            authButton.style.visibility = 'visible';
+        }
     }
 }
 
 // Function to verify API is ready
 function isApiReady() {
-    return gapiInited && gisInited && gapi.client.getToken() !== null;
+    return gapiInited && gisInited && gapi.client && gapi.client.getToken() !== null;
 }
 
 async function handleAuthClick() {
-    tokenClient.callback = async (resp) => {
-        if (resp.error !== undefined) {
-            throw (resp);
-        }
-        await listMajors();
-        document.getElementById('signout_button').style.visibility = 'visible';
-        document.getElementById('authorize_button').innerText = 'Refresh';
-    };
+    try {
+        tokenClient.callback = async (resp) => {
+            if (resp.error !== undefined) {
+                throw resp;
+            }
+            document.getElementById('signout_button').style.visibility = 'visible';
+            document.getElementById('authorize_button').innerText = 'Refresh';
+        };
 
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({prompt: 'consent'});
-    } else {
-        tokenClient.requestAccessToken({prompt: ''});
+        if (gapi.client.getToken() === null) {
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        } else {
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
+    } catch (err) {
+        console.error('Auth error:', err);
     }
 }
 
@@ -107,19 +115,22 @@ async function readFromSheet(range) {
 // Function to verify login
 async function verifyLogin(username, password) {
     try {
+        // تأكد من تهيئة API أولاً
         if (!isApiReady()) {
-            await new Promise((resolve) => {
-                tokenClient.callback = async (resp) => {
-                    if (resp.error !== undefined) {
-                        throw resp;
+            await new Promise((resolve, reject) => {
+                handleAuthClick();
+                // انتظر المصادقة
+                const checkAuth = setInterval(() => {
+                    if (isApiReady()) {
+                        clearInterval(checkAuth);
+                        resolve();
                     }
-                    resolve();
-                };
-                if (gapi.client.getToken() === null) {
-                    tokenClient.requestAccessToken({ prompt: 'consent' });
-                } else {
-                    tokenClient.requestAccessToken({ prompt: '' });
-                }
+                }, 1000);
+                // timeout بعد 30 ثانية
+                setTimeout(() => {
+                    clearInterval(checkAuth);
+                    reject(new Error('timeout'));
+                }, 30000);
             });
         }
 
