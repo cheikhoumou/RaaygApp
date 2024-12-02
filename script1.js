@@ -21,18 +21,26 @@ function updateUIForAuth() {
     }
 }
 
-// Handle login
+// معالجة تسجيل الدخول
 async function handleLogin() {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
+    const loginError = document.getElementById('loginError');
     
-    const isValid = await verifyLogin(username, password);
-    if (isValid) {
-        isLoggedIn = true;
-        currentUser = username;
-        updateUIForAuth();
-    } else {
-        alert('اسم المستخدم أو كلمة المرور غير صحيحة');
+    try {
+        loginError.textContent = ''; // مسح أي رسائل خطأ سابقة
+        const success = await verifyLogin(username, password);
+        
+        if (success) {
+            document.querySelector('.container').style.display = 'block';
+            document.getElementById('loginSection').style.display = 'none';
+            updateDashboard(); // تحديث لوحة التحكم
+        } else {
+            loginError.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+        }
+    } catch (err) {
+        console.error('Login error:', err);
+        loginError.textContent = 'حدث خطأ أثناء تسجيل الدخول';
     }
 }
 
