@@ -12,7 +12,7 @@ async function initializeSheets() {
             discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
         });
         isInitialized = true;
-        console.log('Google Sheets API initialized');
+        console.log('Google Sheets API initialized successfully');
     } catch (err) {
         console.error('Error initializing Google Sheets:', err);
         throw new Error('فشل في تهيئة Google Sheets: ' + err.message);
@@ -21,15 +21,15 @@ async function initializeSheets() {
 
 // قراءة البيانات من Google Sheet
 async function readFromSheet(range) {
-    console.log('Attempting to read from sheet:', range);
-    
-    if (!isInitialized) {
-        console.log('Initializing sheets before reading...');
-        await initializeSheets();
-    }
-    
     try {
-        console.log('Making API request...');
+        console.log('Reading from sheet:', range);
+        
+        if (!isInitialized) {
+            console.log('API not initialized, initializing now...');
+            await initializeSheets();
+        }
+
+        console.log('Making API request to spreadsheet:', SHEET_ID);
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: SHEET_ID,
             range: range,
@@ -37,13 +37,19 @@ async function readFromSheet(range) {
             dateTimeRenderOption: 'FORMATTED_STRING'
         });
         
-        console.log('Response received:', response);
+        console.log('Raw API response:', response);
         
-        if (!response.result || !response.result.values) {
-            console.error('No values found in response:', response);
-            throw new Error('لم يتم العثور على بيانات في الجدول');
+        if (!response || !response.result) {
+            console.error('Invalid response:', response);
+            throw new Error('استجابة غير صالحة من Google Sheets');
         }
         
+        if (!response.result.values) {
+            console.error('No values in response:', response.result);
+            throw new Error('لا توجد بيانات في الجدول');
+        }
+        
+        console.log('Successfully read data:', response.result.values);
         return response.result.values;
     } catch (err) {
         console.error('Error reading from sheet:', err);
@@ -59,24 +65,34 @@ async function readFromSheet(range) {
 // التحقق من تسجيل الدخول
 async function verifyLogin(username, password) {
     try {
-        console.log('Verifying login for username:', username);
+        console.log('Starting login verification for username:', username);
         // تغيير النطاق ليشمل الصف الأول أيضاً للتحقق من وجود البيانات
         const users = await readFromSheet('Users!A1:C');
         
-        if (!Array.isArray(users) || users.length <= 1) {
-            console.error('No users found in sheet');
+        console.log('Retrieved users data:', users);
+        
+        if (!Array.isArray(users)) {
+            console.error('Users data is not an array:', users);
+            throw new Error('بيانات المستخدمين غير صالحة');
+        }
+        
+        if (users.length <= 1) {
+            console.error('No user data found (only headers):', users);
             throw new Error('لم يتم العثور على بيانات المستخدمين');
         }
         
-        console.log('Found users:', users.length);
         // تخطي الصف الأول (العناوين) والبحث في باقي الصفوف
-        const user = users.slice(1).find(user => 
-            user[0]?.toString() === username && 
-            user[1]?.toString() === password
-        );
+        const userRows = users.slice(1);
+        console.log('User rows (excluding headers):', userRows);
+        
+        const user = userRows.find(user => {
+            console.log('Checking user row:', user);
+            return user[0]?.toString() === username && 
+                   user[1]?.toString() === password;
+        });
         
         if (user) {
-            console.log('Login successful');
+            console.log('Login successful for user:', user);
             localStorage.setItem('currentUser', JSON.stringify({
                 username: user[0],
                 name: user[2] || user[0]
